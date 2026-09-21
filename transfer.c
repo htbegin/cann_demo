@@ -37,7 +37,7 @@ struct session {
 static void usage(const char *program)
 {
     printf("Usage: %s --role source|target --device ID --host-ip IP --npu-ip IP\n"
-           "  --peer-host-ip IP [--port 18000] [--bytes 1048576] [--timeout-ms 30000]\n"
+           "  --peer-host-ip IP [--port 18000] [--bytes 1048576] [--timeout-ms 120000]\n"
            "Start source first. Target issues an RDMA GET into target HBM.\n"
            "host-ip is the host control IP; npu-ip is this NPU's embedded RoCE IP.\n", program);
 }
@@ -46,7 +46,7 @@ static int parse_options(int argc, char **argv, struct options *o)
 {
     static const char *keys[] = {"--role", "--device", "--host-ip", "--npu-ip", "--peer-host-ip",
                                  "--port", "--bytes", "--timeout-ms"};
-    const char *values[8] = {NULL, NULL, NULL, NULL, NULL, "18000", "1048576", "30000"};
+    const char *values[8] = {NULL, NULL, NULL, NULL, NULL, "18000", "1048576", "120000"};
     unsigned int seen = 0;
     uint64_t number;
     int i, k;

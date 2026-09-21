@@ -151,8 +151,10 @@ Assume host B is `10.10.0.20` and its NPU 3's NIC is `192.168.100.23`.
 ```
 
 Replace 3 with X and supply X's NIC IP. Run one pair at a time per selected NPU.
-`--timeout-ms` defaults to 30000; it controls stream completion and is rounded
-up to seconds for HCCL prepare/connect/execute settings. The control connection
+`--timeout-ms` defaults to 120000; it controls stream completion and is rounded
+up to seconds for HCCL prepare/connect/execute settings. The floor is 120000
+because HCCL requires `HCCL_CONNECT_TIMEOUT` in the 120-7200s range; smaller
+values fail `HcclCommInitClusterInfoMemConfig` on CANN 8.5+. The control connection
 has a total budget of six times that value, including initialization time.
 These settings do not promise a hard wall-clock bound on every vendor cleanup
 call. All control sockets use bounded nonblocking I/O and detect premature EOF.
