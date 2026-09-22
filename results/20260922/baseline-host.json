@@ -1,0 +1,39 @@
+{
+  "name": "baseline-host",
+  "kind": "host",
+  "bytes": 1048576,
+  "batch": 16,
+  "iterations": 10000,
+  "warmup": 20,
+  "window": 16,
+  "mode": "HOST",
+  "cpus": "",
+  "reverse": false,
+  "port": 18110,
+  "streams": 0,
+  "out": "/home/begin/code/cann/demo/results/20260922",
+  "date": "2026-09-22T02:40:18.817876+00:00",
+  "returncodes": [
+    0,
+    0
+  ],
+  "passed": true,
+  "commands": [
+    ". /usr/local/Ascend/ascend-toolkit/set_env.sh && timeout --signal=TERM --kill-after=15s 240s env ASCEND_GLOBAL_LOG_LEVEL=3 ASCEND_SLOG_PRINT_TO_STDOUT=0 HCCL_OP_EXPANSION_MODE=HOST /tmp/a2-roce-bandwidth-build.foZ9JJ/build/host_to_hbm_bw --role source --device 0 --host-ip 192.168.0.217 --npu-ip 29.184.165.65 --peer-host-ip 192.168.0.63 --port 18110 --bytes 1048576 --batch 16 --iterations 10000 --warmup 20 --window 16",
+    ". /usr/local/Ascend/ascend-toolkit/set_env.sh && timeout --signal=TERM --kill-after=15s 240s env ASCEND_GLOBAL_LOG_LEVEL=3 ASCEND_SLOG_PRINT_TO_STDOUT=0 HCCL_OP_EXPANSION_MODE=HOST /tmp/a2-roce-bandwidth-build.Yelr5h/build/host_to_hbm_bw --role target --device 0 --host-ip 192.168.0.63 --npu-ip 29.184.110.95 --peer-host-ip 192.168.0.217 --port 18110 --bytes 1048576 --batch 16 --iterations 10000 --warmup 20 --window 16"
+  ],
+  "bandwidth": [
+    "BANDWIDTH source=HOST payload_bytes=167772160000 elapsed_s=7.150329228 GB/s=23.463557 GiB/s=21.852141 MiB/s=22376.592 Gb/s=187.708 amortized_us_per_get=715.033 verified_region_bytes=16777216"
+  ],
+  "metrics": {
+    "source": "HOST",
+    "payload_bytes": "167772160000",
+    "elapsed_s": "7.150329228",
+    "GB/s": "23.463557",
+    "GiB/s": "21.852141",
+    "MiB/s": "22376.592",
+    "Gb/s": "187.708",
+    "amortized_us_per_get": "715.033",
+    "verified_region_bytes": "16777216"
+  }
+}

@@ -1,0 +1,43 @@
+Dsmi get perftest status end. (status=1)
+Dsmi start roce perftest end. (out=1)
+Dsmi get perftest status end. (status=2)
+Dsmi get perftest status end. (status=2)
+Dsmi get perftest status end. (status=2)
+Dsmi get perftest status end. (status=2)
+Dsmi get perftest status end. (status=2)
+Dsmi get perftest status end. (status=2)
+Dsmi get perftest status end. (status=2)
+Dsmi get perftest status end. (status=2)
+Dsmi get perftest status end. (status=2)
+Dsmi get perftest status end. (status=2)
+Dsmi get perftest status end. (status=2)
+Dsmi get perftest status end. (status=2)
+Dsmi get perftest status end. (status=1)
+roce_report:
+ new post send flow is not supported, falling back to ibv_post_send
+--------------------------------------------------------------------------------------------------------------------
+
+************************************
+* Waiting for client to connect... *
+************************************
+--------------------------------------------------------------------------------------------------------------------
+                    RDMA_Read BW Test
+ Dual-port       : OFF		Device         : hns_0
+ Number of qps   : 1		Transport type : IB
+ Connection type : RC		Using SRQ      : OFF
+ CQ Moderation   : 1
+ Mtu             : 4096[B]
+ Link type       : Ethernet
+ GID index       : 3
+ Outstand reads  : 128
+ rdma_cm QPs	 : OFF
+ Data ex. method : Ethernet
+--------------------------------------------------------------------------------------------------------------------
+ local address: LID 0000 QPN 0x004a PSN 0x1622f OUT 0x80 RKey 0x000100 VAddr 0x0003fffe3af000
+ GID: 00:00:00:00:00:00:00:00:00:00:255:255:29:184:165:65
+ remote address: LID 0000 QPN 0x0032 PSN 0x33889e OUT 0x80 RKey 0x000100 VAddr 0x0003fffe3af000
+ GID: 00:00:00:00:00:00:00:00:00:00:255:255:29:184:110:95
+--------------------------------------------------------------------------------------------------------------------
+ #bytes              #iterations         BW peak[MB/sec]     BW average[MB/sec]  MsgRate[Mpps]
+ 1048576             93205               0.00                23302.26            0.023302
+--------------------------------------------------------------------------------------------------------------------

@@ -7,6 +7,11 @@ Two standalone programs share `transfer.c` and `control.c`:
 | `hbm_to_hbm` | NPU 1 HBM | NPU X HBM, on the same or a second host |
 | `host_to_hbm` | Host A DDR, registered through NPU 1 | NPU X HBM on host B |
 
+`make` also builds `hbm_to_hbm_bw` and `host_to_hbm_bw`, which reuse the same
+registration, RDMA GET, verification and cleanup routines. See
+[BANDWIDTH.md](BANDWIDTH.md) for measurement semantics, the two-node commands,
+and comparison with `hccn_tool -roce_test`.
+
 Both use **receiver-initiated RDMA GET**. “Source” describes where the data
 lives; the target issues the transfer. The second demo interprets the requested
 destination NPU X as its HBM, not host B's DDR.
@@ -40,7 +45,9 @@ HIXL dependency, Python data path, MPI requirement, or C++ wrapper.
   `HcclCommInitClusterInfoMemConfig`, `HcclRegisterGlobalMem`,
   `HcclCommBindMem`, `HcclCommPrepare`, `HcclBatchGet`, and
   `aclrtSynchronizeStreamWithTimeout`. The reference LMCache backend targets
-  CANN 8.5+. This implementation has **not been linked or run on an A2 system**.
+  CANN 8.5+. All four programs have been compiled and linked against CANN
+  8.5.2 on both aarch64 A2 hosts. Both bandwidth programs have also passed
+  cross-host NPU 0 transfers; see the [bandwidth results](results/20260922/README.md).
 - Host control-network connectivity between the processes and an available TCP
   port (default 18000). HCCL also establishes its own device-side connections;
   permitting only TCP 18000 is insufficient for the RoCE data path.
@@ -223,14 +230,17 @@ make test
 This builds the real control code and a GNU C89 probe. Python standard-library
 tests cover metadata rejection, same-host/two-host rank-table generation,
 fragmented TCP frames, readiness/completion exchange, early EOF, malformed
-frames, and timeouts. They use loopback TCP only and do not emulate RDMA.
+frames, and timeouts. Benchmark-loop tests cover timing exclusions, byte
+accounting, submission windows, failures and overflow. These tests use
+loopback TCP and deterministic callbacks; they do not emulate RDMA.
 
-Validation performed in the source-only workspace: GNU C89 syntax checks of
-all demo C files against the local ACL headers, warnings-as-errors compilation
-of the CPU control code, ten passing CPU protocol tests, and an ABI layout check
-against local HCOMM headers. Full vendor-library linking and all three A2
-hardware scenarios remain untested because this workspace has no installed
-CANN runtime or A2 device.
+Validation: GNU C89 warnings-as-errors compilation against local ACL headers,
+ten passing CPU protocol tests, benchmark-loop tests, and the earlier ABI
+layout check against local HCOMM headers. All four programs also compiled
+and linked against installed CANN 8.5.2 in isolated directories on both hulk
+nodes. The correctness demos have prior same-host and cross-host execution
+logs. On 2026-09-22 both bandwidth programs passed cross-host transfer,
+final-buffer verification, and cleanup; see the [measurement report](results/20260922/README.md).
 
 ## References
 

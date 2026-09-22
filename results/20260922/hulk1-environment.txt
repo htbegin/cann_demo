@@ -1,0 +1,7 @@
+Speed: 200000 Mb/s
+6
+144-167
+16.0 GT/s PCIe
+16
+77d5f263f20890a94fdc2dfbbf377dcc4b79058fd6892f2a04b4fc804494afba  /tmp/a2-roce-bandwidth-build.Yelr5h/build/hbm_to_hbm_bw
+fdc572873b7bcbd7e9781820b700b81f03584c0018b527e237f8281c6091ed23  /tmp/a2-roce-bandwidth-build.Yelr5h/build/host_to_hbm_bw

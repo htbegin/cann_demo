@@ -13,12 +13,14 @@ SDK_LDLIBS ?= -lhcomm -lhccl -l$(ACL_LIB)
 DEMO_CFLAGS = -std=gnu89 -Wall -Wextra -Werror -Wdeclaration-after-statement
 DEPFLAGS = -MMD -MP
 
-DEMOS = $(BUILD_DIR)/hbm_to_hbm $(BUILD_DIR)/host_to_hbm
-COMMON_OBJS = $(BUILD_DIR)/transfer.o $(BUILD_DIR)/control.o
-DEMO_OBJS = $(BUILD_DIR)/hbm_to_hbm.o $(BUILD_DIR)/host_to_hbm.o
+DEMO_NAMES = hbm_to_hbm host_to_hbm hbm_to_hbm_bw host_to_hbm_bw
+DEMOS = $(addprefix $(BUILD_DIR)/,$(DEMO_NAMES))
+COMMON_OBJS = $(BUILD_DIR)/transfer.o $(BUILD_DIR)/control.o $(BUILD_DIR)/bench.o
+DEMO_OBJS = $(addsuffix .o,$(DEMOS))
 TEST_BIN = $(BUILD_DIR)/control_probe
+BENCH_TEST_BIN = $(BUILD_DIR)/bench_test
 TEST_OBJS = $(BUILD_DIR)/control_probe.o $(BUILD_DIR)/control.o
-OBJECTS = $(sort $(COMMON_OBJS) $(DEMO_OBJS) $(TEST_OBJS))
+OBJECTS = $(sort $(COMMON_OBJS) $(DEMO_OBJS) $(TEST_OBJS) $(BUILD_DIR)/bench_test.o)
 
 .PHONY: all test clean
 all: $(DEMOS)
@@ -38,14 +40,21 @@ $(BUILD_DIR)/control_probe.o: tests/control_probe.c | $(BUILD_DIR)
 $(TEST_BIN): $(TEST_OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
+$(BUILD_DIR)/bench_test.o: tests/bench_test.c | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) -I. $(CFLAGS) $(DEMO_CFLAGS) $(DEPFLAGS) -c $< -o $@
+
+$(BENCH_TEST_BIN): $(BUILD_DIR)/bench_test.o $(BUILD_DIR)/bench.o
+	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
 $(BUILD_DIR):
 	mkdir -p $@
 
 # This target builds only the CPU control code; no CANN installation is needed.
-test: $(TEST_BIN)
+test: $(TEST_BIN) $(BENCH_TEST_BIN)
 	$(PYTHON) tests/test_control.py $(abspath $(TEST_BIN))
+	$(BENCH_TEST_BIN)
 
 clean:
-	rm -f $(DEMOS) $(TEST_BIN) $(OBJECTS) $(OBJECTS:.o=.d)
+	rm -f $(DEMOS) $(TEST_BIN) $(BENCH_TEST_BIN) $(OBJECTS) $(OBJECTS:.o=.d)
 
 -include $(OBJECTS:.o=.d)

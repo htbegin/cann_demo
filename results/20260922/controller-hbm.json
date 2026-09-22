@@ -1,0 +1,40 @@
+{
+  "name": "controller-hbm",
+  "kind": "hbm",
+  "hulk0_dir": "/tmp/a2-roce-bandwidth-build.foZ9JJ",
+  "hulk1_dir": "/tmp/a2-roce-bandwidth-build.Yelr5h",
+  "bytes": 16777216,
+  "batch": 16,
+  "iterations": 1250,
+  "warmup": 20,
+  "window": 16,
+  "mode": "HOST",
+  "cpus": "144-167",
+  "reverse": false,
+  "port": 18110,
+  "out": "demo/results/20260922",
+  "date": "2026-09-22T02:49:24.653989+00:00",
+  "returncodes": [
+    0,
+    0
+  ],
+  "passed": true,
+  "commands": [
+    ". /usr/local/Ascend/ascend-toolkit/set_env.sh && timeout --signal=TERM --kill-after=15s 240s taskset -c 144-167 env ASCEND_GLOBAL_LOG_LEVEL=3 ASCEND_SLOG_PRINT_TO_STDOUT=0 HCCL_OP_EXPANSION_MODE=HOST /tmp/a2-roce-bandwidth-build.foZ9JJ/build/hbm_to_hbm_bw --role source --device 0 --host-ip 192.168.0.217 --npu-ip 29.184.165.65 --peer-host-ip 192.168.0.63 --port 18110 --bytes 16777216 --batch 16 --iterations 1250 --warmup 20 --window 16",
+    ". /usr/local/Ascend/ascend-toolkit/set_env.sh && timeout --signal=TERM --kill-after=15s 240s taskset -c 144-167 env ASCEND_GLOBAL_LOG_LEVEL=3 ASCEND_SLOG_PRINT_TO_STDOUT=0 HCCL_OP_EXPANSION_MODE=HOST /tmp/a2-roce-bandwidth-build.Yelr5h/build/hbm_to_hbm_bw --role target --device 0 --host-ip 192.168.0.63 --npu-ip 29.184.110.95 --peer-host-ip 192.168.0.217 --port 18110 --bytes 16777216 --batch 16 --iterations 1250 --warmup 20 --window 16"
+  ],
+  "bandwidth": [
+    "BANDWIDTH source=HBM payload_bytes=335544320000 elapsed_s=13.729410680 GB/s=24.439820 GiB/s=22.761356 MiB/s=23307.628 Gb/s=195.519 amortized_us_per_get=10983.529 verified_region_bytes=268435456"
+  ],
+  "metrics": {
+    "source": "HBM",
+    "payload_bytes": "335544320000",
+    "elapsed_s": "13.729410680",
+    "GB/s": "24.439820",
+    "GiB/s": "22.761356",
+    "MiB/s": "23307.628",
+    "Gb/s": "195.519",
+    "amortized_us_per_get": "10983.529",
+    "verified_region_bytes": "268435456"
+  }
+}

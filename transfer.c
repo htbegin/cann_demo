@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include "demo.h"
+#include "bench.h"
 #include "control.h"
 #include "hccl_c_abi.h"
 #include "acl/acl.h"
@@ -9,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 struct options {
@@ -16,6 +18,7 @@ struct options {
     uint16_t port;
     size_t bytes;
     const char *host_ip, *npu_ip, *peer_host_ip;
+    struct bench_config bench;
 };
 struct session {
     A2Comm comm;
@@ -34,25 +37,34 @@ struct session {
     if ((call) != 0) { fprintf(stderr, "%s: %s\n", #call, strerror(errno)); goto out; } \
 } while (0)
 
-static void usage(const char *program)
+static void usage(const char *program, int benchmark)
 {
     printf("Usage: %s --role source|target --device ID --host-ip IP --npu-ip IP\n"
            "  --peer-host-ip IP [--port 18000] [--bytes 1048576] [--timeout-ms 120000]\n"
            "Start source first. Target issues an RDMA GET into target HBM.\n"
            "host-ip is the host control IP; npu-ip is this NPU's embedded RoCE IP.\n", program);
+    if (benchmark) {
+        printf("Bandwidth options (must match on both peers):\n"
+               "  [--batch 16] [--warmup 10] [--iterations 1000] [--window 16]\n"
+               "--bytes is bytes per descriptor; --batch is descriptors per GET (1..256).\n"
+               "Each peer allocates bytes*batch; --window is GET calls per stream wait (1..1024).\n"
+               "Warmup and iterations count GET calls. Setup/warmup/verification are not timed.\n");
+    }
 }
 
-static int parse_options(int argc, char **argv, struct options *o)
+static int parse_options(int argc, char **argv, struct options *o, int benchmark)
 {
     static const char *keys[] = {"--role", "--device", "--host-ip", "--npu-ip", "--peer-host-ip",
-                                 "--port", "--bytes", "--timeout-ms"};
-    const char *values[8] = {NULL, NULL, NULL, NULL, NULL, "18000", "1048576", "120000"};
+                                 "--port", "--bytes", "--timeout-ms", "--batch", "--warmup",
+                                 "--iterations", "--window"};
+    const char *values[12] = {NULL, NULL, NULL, NULL, NULL, "18000", "1048576", "120000",
+                              "16", "10", "1000", "16"};
     unsigned int seen = 0;
     uint64_t number;
-    int i, k;
+    int i, k, key_count = benchmark ? 12 : 8;
     for (i = 1; i < argc; i += 2) {
-        for (k = 0; k < 8 && strcmp(argv[i], keys[k]); ++k) {}
-        if (k == 8 || i + 1 >= argc || (seen & (1U << k))) {
+        for (k = 0; k < key_count && strcmp(argv[i], keys[k]); ++k) {}
+        if (k == key_count || i + 1 >= argc || (seen & (1U << k))) {
             fprintf(stderr, "Unknown, duplicate, or incomplete option: %s\n", argv[i]);
             return -1;
         }
@@ -74,6 +86,26 @@ static int parse_options(int argc, char **argv, struct options *o)
     o->bytes = (size_t)number;
     if (parse_number(values[7], 1, INT_MAX / 6, &number)) return -1;
     o->timeout_ms = (int)number;
+    if (benchmark) {
+        /* CANN 8.5 accepts connect timeouts from 120 through 7200 seconds. */
+        if (o->timeout_ms < 120000 || o->timeout_ms > 7200000) {
+            fprintf(stderr, "Benchmark --timeout-ms must be 120000..7200000\n");
+            return -1;
+        }
+        o->bench.message_bytes = o->bytes;
+        if (parse_number(values[8], 1, 256, &number)) return -1;
+        o->bench.batch = (uint32_t)number;
+        if (parse_number(values[9], 0, UINT32_MAX, &number)) return -1;
+        o->bench.warmup = (uint32_t)number;
+        if (parse_number(values[10], 1, UINT32_MAX, &number)) return -1;
+        o->bench.iterations = (uint32_t)number;
+        if (parse_number(values[11], 1, 1024, &number)) return -1;
+        o->bench.window = (uint32_t)number;
+        if (bench_validate(&o->bench, &o->bytes)) {
+            fprintf(stderr, "Invalid benchmark sizes/counts: %s\n", strerror(errno));
+            return -1;
+        }
+    }
     return 0;
 }
 
@@ -167,11 +199,26 @@ out:
     return -1;
 }
 
+static int verify(struct session *s, const struct options *o)
+{
+    size_t i;
+    CHECK(aclrtMemcpy(s->scratch, o->bytes, s->buffer, o->bytes, ACL_MEMCPY_DEVICE_TO_HOST));
+    for (i = 0; i < o->bytes; ++i) {
+        if (s->scratch[i] != pattern(i)) {
+            fprintf(stderr, "Mismatch at byte %zu: expected %u, got %u\n",
+                    i, (unsigned)pattern(i), (unsigned)s->scratch[i]);
+            return 1;
+        }
+    }
+    return 0;
+out:
+    return -1;
+}
+
 static int pull_and_verify(struct session *s, const struct options *o, const struct metadata *peer)
 {
     A2OneSideOp op;
     int64_t start;
-    size_t i;
     memset(&op, 0, sizeof(op));
     op.local_addr = s->buffer;
     /* This is the original source VA. HCOMM resolves its registered device VA. */
@@ -184,13 +231,117 @@ static int pull_and_verify(struct session *s, const struct options *o, const str
     s->quiesced = 1;
     printf("GET complete: %zu bytes, %" PRId64 " ms (setup and verification excluded)\n",
            o->bytes, monotonic_ms() - start);
-    CHECK(aclrtMemcpy(s->scratch, o->bytes, s->buffer, o->bytes, ACL_MEMCPY_DEVICE_TO_HOST));
-    for (i = 0; i < o->bytes; ++i) {
-        if (s->scratch[i] != pattern(i)) {
-            fprintf(stderr, "Mismatch at byte %zu: expected %u, got %u\n",
-                    i, (unsigned)pattern(i), (unsigned)s->scratch[i]);
-            return 1;
-        }
+    return verify(s, o);
+out:
+    return -1;
+}
+
+struct benchmark_context {
+    struct session *session;
+    const struct options *options;
+    A2OneSideOp ops[256];
+};
+
+static int benchmark_submit(void *opaque)
+{
+    struct benchmark_context *b = opaque;
+    struct session *s = b->session;
+    s->quiesced = 0;
+    CHECK(HcclBatchGet(s->comm, 0, b->ops, b->options->bench.batch, s->stream));
+    return 0;
+out:
+    return -1;
+}
+
+static int benchmark_sync(void *opaque)
+{
+    struct benchmark_context *b = opaque;
+    CHECK(aclrtSynchronizeStreamWithTimeout(b->session->stream, b->options->timeout_ms));
+    b->session->quiesced = 1;
+    return 0;
+out:
+    return -1;
+}
+
+static int benchmark_reset(void *opaque)
+{
+    struct benchmark_context *b = opaque;
+    struct session *s = b->session;
+    /* scratch still contains the initial complement; warmup did not modify it. */
+    CHECK(aclrtMemcpy(s->buffer, b->options->bytes, s->scratch, b->options->bytes,
+                      ACL_MEMCPY_HOST_TO_DEVICE));
+    return 0;
+out:
+    return -1;
+}
+
+static int64_t benchmark_now_ns(void *opaque)
+{
+    struct timespec now;
+    (void)opaque;
+    if (clock_gettime(CLOCK_MONOTONIC, &now)) return -1;
+    return (int64_t)now.tv_sec * INT64_C(1000000000) + now.tv_nsec;
+}
+
+static int benchmark_and_verify(struct session *s, const struct options *o,
+                                const struct metadata *peer)
+{
+    static const struct bench_ops callbacks = {
+        benchmark_submit, benchmark_sync, benchmark_reset, benchmark_now_ns
+    };
+    struct benchmark_context context;
+    struct bench_result result;
+    uint32_t i;
+    size_t offset;
+    double seconds, bytes_per_second;
+    int verified;
+    memset(&context, 0, sizeof(context));
+    context.session = s;
+    context.options = o;
+    for (i = 0; i < o->bench.batch; ++i) {
+        offset = (size_t)i * o->bench.message_bytes;
+        context.ops[i].local_addr = (unsigned char *)s->buffer + offset;
+        context.ops[i].remote_addr = (void *)(uintptr_t)(peer->address + offset);
+        context.ops[i].count = o->bench.message_bytes;
+        context.ops[i].data_type = 7;
+    }
+    printf("Benchmark: message_bytes=%zu batch=%" PRIu32 " region_bytes=%zu "
+           "warmup=%" PRIu32 " iterations=%" PRIu32 " window=%" PRIu32 "\n",
+           o->bench.message_bytes, o->bench.batch, o->bytes, o->bench.warmup,
+           o->bench.iterations, o->bench.window);
+    fflush(stdout);
+    if (bench_run(&o->bench, &callbacks, &context, &result)) {
+        fprintf(stderr, "Benchmark failed; no bandwidth result published\n");
+        return -1;
+    }
+    verified = verify(s, o);
+    if (verified) return verified;
+    seconds = (double)result.elapsed_ns / 1e9;
+    bytes_per_second = (double)result.payload_bytes / seconds;
+    printf("BANDWIDTH source=%s payload_bytes=%" PRIu64 " elapsed_s=%.9f "
+           "GB/s=%.6f GiB/s=%.6f MiB/s=%.3f Gb/s=%.3f "
+           "amortized_us_per_get=%.3f verified_region_bytes=%zu\n",
+           peer->kind == SOURCE_HOST ? "HOST" : "HBM", result.payload_bytes, seconds,
+           bytes_per_second / 1e9, bytes_per_second / 1073741824.0,
+           bytes_per_second / 1048576.0, bytes_per_second * 8 / 1e9,
+           seconds * 1e6 / o->bench.iterations, o->bytes);
+    if (seconds < 1.0) {
+        printf("NOTE: timed interval is below one second; increase --iterations for steadier results\n");
+    }
+    return 0;
+}
+
+static int agree_benchmark(struct control *control, const struct options *o)
+{
+    char local[CONTROL_FRAME_SIZE], peer[CONTROL_FRAME_SIZE];
+    snprintf(local, sizeof(local), "A2BENCH1 %zu %" PRIu32 " %" PRIu32 " %" PRIu32 " %" PRIu32,
+             o->bench.message_bytes, o->bench.batch, o->bench.warmup,
+             o->bench.iterations, o->bench.window);
+    REQUIRE(control_send(control, local));
+    REQUIRE(control_receive(control, peer));
+    if (strcmp(local, peer)) {
+        fprintf(stderr, "Benchmark configuration mismatch: local='%s' peer='%s'\n", local, peer);
+        return -1;
     }
     return 0;
 out:
@@ -216,7 +367,7 @@ out:
     return -1;
 }
 
-int run_demo(int argc, char **argv, enum source_memory memory)
+static int run_session(int argc, char **argv, enum source_memory memory, int benchmark)
 {
     struct options options;
     struct session session;
@@ -225,8 +376,8 @@ int run_demo(int argc, char **argv, enum source_memory memory)
     char message[CONTROL_FRAME_SIZE];
     int result = 1, verified = 0, transfer_result, cleanup_attempted = 0;
     memset(&session, 0, sizeof(session));
-    if (argc == 2 && !strcmp(argv[1], "--help")) { usage(argv[0]); return 0; }
-    if (parse_options(argc, argv, &options)) { usage(argv[0]); return 1; }
+    if (argc == 2 && !strcmp(argv[1], "--help")) { usage(argv[0], benchmark); return 0; }
+    if (parse_options(argc, argv, &options, benchmark)) { usage(argv[0], benchmark); return 1; }
     control_init(&control, options.timeout_ms * 6);
     if (initialize(&session, &options, memory, &local)) goto out;
     if (options.source) REQUIRE(control_accept(&control, options.host_ip, options.port));
@@ -236,6 +387,7 @@ int run_demo(int argc, char **argv, enum source_memory memory)
     REQUIRE(control_receive(&control, message));
     REQUIRE(metadata_decode(message, &peer));
     REQUIRE(metadata_validate(&local, &peer, options.peer_host_ip));
+    if (benchmark && agree_benchmark(&control, &options)) goto out;
     if (prepare(&session, &options, &local, &peer)) goto out;
     /* No payload operation before both sides have prepared their registrations. */
     session.exposed = 1;
@@ -251,7 +403,8 @@ int run_demo(int argc, char **argv, enum source_memory memory)
         verified = !strcmp(message, "PASS");
         REQUIRE(control_send(&control, "DONE"));
     } else {
-        transfer_result = pull_and_verify(&session, &options, &peer);
+        transfer_result = benchmark ? benchmark_and_verify(&session, &options, &peer) :
+                                     pull_and_verify(&session, &options, &peer);
         if (transfer_result < 0) goto out;
         verified = transfer_result == 0;
         REQUIRE(control_send(&control, verified ? "PASS" : "FAIL"));
@@ -278,4 +431,14 @@ out:
     if (!cleanup_attempted && cleanup(&session, &options)) result = 1;
     control_close(&control);
     return result;
+}
+
+int run_demo(int argc, char **argv, enum source_memory memory)
+{
+    return run_session(argc, argv, memory, 0);
+}
+
+int run_bandwidth(int argc, char **argv, enum source_memory memory)
+{
+    return run_session(argc, argv, memory, 1);
 }

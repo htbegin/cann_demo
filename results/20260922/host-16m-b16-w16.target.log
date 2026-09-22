@@ -1,0 +1,5 @@
+target: logical=0 physical=0 host=192.168.0.63 NPU_RoCE=29.184.110.95 memory=HBM bytes=268435456
+Rank table: {"version":"1.0","status":"completed","server_count":"2","server_list":[{"server_id":"192.168.0.217","device":[{"device_id":"0","device_ip":"29.184.165.65","rank_id":"0"}]},{"server_id":"192.168.0.63","device":[{"device_id":"0","device_ip":"29.184.110.95","rank_id":"1"}]}]}
+Benchmark: message_bytes=16777216 batch=16 region_bytes=268435456 warmup=20 iterations=625 window=16
+BANDWIDTH source=HOST payload_bytes=167772160000 elapsed_s=6.867658075 GB/s=24.429312 GiB/s=22.751570 MiB/s=23297.607 Gb/s=195.434 amortized_us_per_get=10988.253 verified_region_bytes=268435456
+PASS: all 268435456 bytes verified in target HBM; both peers released registrations
